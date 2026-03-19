@@ -14,7 +14,9 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -march=native -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Wall -march=native")
+# Changed -O3 → -O2 and removed -g: debug symbols were causing cc1plus OOM
+# on Raspberry Pi 5 when compiling ov2slam.cpp. Revert to -O3 if RAM is added.
 
 ########
 # OpenCV
@@ -25,7 +27,7 @@ find_package(OpenCV REQUIRED)
 # NOTE!
 #######
 # Set to OFF if you did not compile OpenCV w. opencv_contrib
-set(WITH_OPENCV_CONTRIB ON)
+set(WITH_OPENCV_CONTRIB OFF)
 
 if (OpenCV_FOUND)
   message(STATUS "Found OpenCV lib : ${OpenCV_VERSION} - ${OpenCV_INCLUDE_DIRS}")
@@ -96,6 +98,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
+find_package(message_filters REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(PCL REQUIRED)
@@ -182,9 +185,17 @@ install(TARGETS ${PROJECT_NAME} DESTINATION lib/)
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/ov2slam_node.cpp)
 
+# ov2slam_node.cpp is pure ROS glue (subscribers, spin). Use -O1 -g0 to avoid
+# OOM during compilation on memory-constrained hardware (e.g. Raspberry Pi 5).
+# The SLAM library itself is still compiled at -O3.
+set_source_files_properties(src/ov2slam_node.cpp
+  PROPERTIES COMPILE_FLAGS "-O1 -g0"
+)
+
 ament_target_dependencies(${PROJECT_NAME}_node
   rclcpp
   image_transport
+  message_filters
   std_msgs
   sensor_msgs
   cv_bridge
