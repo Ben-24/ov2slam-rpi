@@ -27,14 +27,26 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <queue>
+// REMOVED: #include <mutex> and #include <queue>
+// REASON: The original sync used a manual producer/consumer queue with a ±15ms
+// tolerance check in a separate thread (sync_process). When cameras are exactly
+// one frame (33ms) apart the queue drains to empty after every throw, causing the
+// next arriving pair to also be 33ms apart — it chases itself and never matches.
+// REPLACED BY: message_filters::ApproximateTimeSynchronizer, which maintains
+// a sliding window across both topics and delivers the closest-in-time pair.
+// To revert: restore the includes above, restore subLeftImage/subRightImage,
+// sync_process(), img0_buf/img1_buf/img_mutex members, and the subscription +
+// sync_thread setup in main(). Also revert CMakeLists.txt message_filters lines.
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 
-#include <image_transport/image_transport.hpp>
-#include <image_transport/subscriber_filter.hpp>
+// REMOVED: #include <image_transport/image_transport.hpp>
+// REMOVED: #include <image_transport/subscriber_filter.hpp>
+// REPLACED BY: message_filters direct subscribers
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -55,103 +67,48 @@ public:
         std::cout << "\nSensors Grabber is created...\n";
     }
 
-    void subLeftImage(const sensor_msgs::msg::Image &image) {
-        std::lock_guard<std::mutex> lock(img_mutex);
-        img0_buf.push(image);
-    }
-
-    void subRightImage(const sensor_msgs::msg::Image &image) {
-        std::lock_guard<std::mutex> lock(img_mutex);
-        img1_buf.push(image);
-    }
+    // REMOVED: subLeftImage() and subRightImage() — were the queue push callbacks.
+    // REMOVED: img0_buf, img1_buf, img_mutex members.
+    // REMOVED: sync_process() — was the drain-and-match thread with ±15ms tolerance.
+    // All replaced by stereoCallback() below, called by ApproximateTimeSynchronizer.
 
     cv::Mat getGrayImageFromMsg(const sensor_msgs::msg::Image &img_msg)
     {
-        // Get and prepare images
         cv_bridge::CvImageConstPtr ptr;
-        try {    
+        try {
             ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
-        } 
+        }
         catch(cv_bridge::Exception &e)
         {
             RCLCPP_ERROR(rclcpp::get_logger("cv_bridge_logger"), "\n\n\ncv_bridge exeception: %s\n\n\n", e.what());
         }
-
         return ptr->image;
     }
 
-    // extract images with same timestamp from two topics
-    // (mostly derived from Vins-Fusion: https://github.com/HKUST-Aerial-Robotics/VINS-Fusion)
-    void sync_process()
+    // Called by ApproximateTimeSynchronizer with the best-matched left/right pair.
+    // Runs directly on the spin() thread — no separate sync thread needed.
+    void stereoCallback(
+        const sensor_msgs::msg::Image::ConstSharedPtr &img0_msg,
+        const sensor_msgs::msg::Image::ConstSharedPtr &img1_msg)
     {
-        std::cout << "\nStarting the measurements reader thread!\n";
-        
-        while( !pslam_->bexit_required_ )
-        {
-            if( pslam_->pslamstate_->stereo_ )
-            {
-                cv::Mat image0, image1;
-
-                std::lock_guard<std::mutex> lock(img_mutex);
-
-                if (!img0_buf.empty() && !img1_buf.empty())
-                {
-                    double time0 = rclcpp::Time( img0_buf.front().header.stamp ).seconds();
-                    double time1 = rclcpp::Time( img1_buf.front().header.stamp ).seconds();
-
-                    // sync tolerance
-                    if(time0 < time1 - 0.015)
-                    {
-                        img0_buf.pop();
-                        std::cout << "\n Throw img0 -- Sync error : " << (time0 - time1) << "\n";
-                    }
-                    else if(time0 > time1 + 0.015)
-                    {
-                        img1_buf.pop();
-                        std::cout << "\n Throw img1 -- Sync error : " << (time0 - time1) << "\n";
-                    }
-                    else
-                    {
-                        image0 = getGrayImageFromMsg(img0_buf.front());
-                        image1 = getGrayImageFromMsg(img1_buf.front());
-                        img0_buf.pop();
-                        img1_buf.pop();
-
-                        if( !image0.empty() && !image1.empty() ) {
-                            pslam_->addNewStereoImages(time0, image0, image1);
-                        }
-                    }
-                }
-            } 
-            else if( pslam_->pslamstate_->mono_ ) 
-            {
-                cv::Mat image0;
-
-                std::lock_guard<std::mutex> lock(img_mutex);
-
-                if ( !img0_buf.empty() )
-                {
-                    double time = rclcpp::Time( img0_buf.front().header.stamp ).seconds();
-                    image0 = getGrayImageFromMsg(img0_buf.front());
-                    img0_buf.pop();
-
-                    if( !image0.empty()) {
-                        pslam_->addNewMonoImage(time, image0);
-                    }
-                }
-            }
-
-            std::chrono::milliseconds dura(1);
-            std::this_thread::sleep_for(dura);
+        double time0 = rclcpp::Time(img0_msg->header.stamp).seconds();
+        cv::Mat image0 = getGrayImageFromMsg(*img0_msg);
+        cv::Mat image1 = getGrayImageFromMsg(*img1_msg);
+        if (!image0.empty() && !image1.empty()) {
+            pslam_->addNewStereoImages(time0, image0, image1);
         }
-
-        std::cout << "\n Bag reader SyncProcess thread is terminating!\n";
     }
 
-    std::queue<sensor_msgs::msg::Image> img0_buf;
-    std::queue<sensor_msgs::msg::Image> img1_buf;
-    std::mutex img_mutex;
-    
+    // Mono callback — called directly from subscription, no change in behaviour.
+    void monoCallback(const sensor_msgs::msg::Image::ConstSharedPtr &img_msg)
+    {
+        double time = rclcpp::Time(img_msg->header.stamp).seconds();
+        cv::Mat image0 = getGrayImageFromMsg(*img_msg);
+        if (!image0.empty()) {
+            pslam_->addNewMonoImage(time, image0);
+        }
+    }
+
     SlamManager *pslam_;
 };
 
@@ -200,24 +157,50 @@ int main(int argc, char** argv)
     // Create the Bag file reader & callback functions
     SensorsGrabber sb(&slam);
 
-    // Create callbacks according to the topics set in the parameters file
-    auto subleft = node->create_subscription<sensor_msgs::msg::Image>(fsSettings["Camera.topic_left"], 2, [&sb](const sensor_msgs::msg::Image &image){return sb.subLeftImage(image);});
-    auto subright = node->create_subscription<sensor_msgs::msg::Image>(fsSettings["Camera.topic_right"], 2, [&sb](const sensor_msgs::msg::Image &image){return sb.subRightImage(image);});
+    std::string topic_left  = fsSettings["Camera.topic_left"];
+    std::string topic_right = fsSettings["Camera.topic_right"];
 
-    // Start a thread for providing new measurements to the SLAM
-    std::thread sync_thread(&SensorsGrabber::sync_process, &sb);
+    if( pparams->stereo_ )
+    {
+        // REMOVED: two create_subscription() calls + sync_process thread.
+        // REASON: The manual ±15ms tolerance queue never matched frames that are a
+        // constant 33ms apart — it drained the queue to empty on every throw, causing
+        // the next pair to be equally mismatched. See SensorsGrabber comment above.
+        //
+        // REPLACED BY: ApproximateTimeSynchronizer with a 10-frame sliding window.
+        // It finds the closest-in-time pair regardless of constant timestamp offset.
+        using SyncPolicy = message_filters::sync_policies::ApproximateTime<
+            sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
 
-    // ROS Spin
-    rclcpp::spin(node);
+        // Use sensor_data QoS (BEST_EFFORT) to match camera_ros's publisher QoS.
+        // The default rmw_qos_profile_default is RELIABLE, which is incompatible
+        // with a BEST_EFFORT publisher and silently drops all messages.
+        auto sub_left  = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::Image>>(node, topic_left,  rmw_qos_profile_sensor_data);
+        auto sub_right = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::Image>>(node, topic_right, rmw_qos_profile_sensor_data);
+
+        auto sync = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10), *sub_left, *sub_right);
+        sync->registerCallback(&SensorsGrabber::stereoCallback, &sb);
+
+        // ROS Spin — stereoCallback fires here, no separate sync thread needed.
+        rclcpp::spin(node);
+
+        // Keep subscribers alive until after spin returns
+        (void)sub_left; (void)sub_right; (void)sync;
+    }
+    else if( pparams->mono_ )
+    {
+        auto subimg = node->create_subscription<sensor_msgs::msg::Image>(
+            topic_left, 2,
+            [&sb](const sensor_msgs::msg::Image::ConstSharedPtr &img){ sb.monoCallback(img); });
+
+        rclcpp::spin(node);
+        (void)subimg;
+    }
 
     // Request Slam Manager thread to exit
     slam.bexit_required_ = true;
 
-    // Waiting end of SLAM Manager
-    while( slam.bis_on_ ) {
-        std::chrono::seconds dura(1);
-        std::this_thread::sleep_for(dura);
-    }
+    slamthread.join();
 
     return 0;
 }

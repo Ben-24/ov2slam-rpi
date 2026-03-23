@@ -84,7 +84,15 @@ SlamParams::SlamParams(const cv::FileStorage &fsSettings) {
         cv::cv2eigen(cvTbc0,Tbc0);
         cv::cv2eigen(cvTbc1,Tbc1);
 
-        T_left_right_ = Sophus::SE3d(Tbc0.inverse() * Tbc1);
+        // Original line — can crash if floating-point error in the matrix product
+        // causes the rotation block to fail Sophus's orthogonality check (||R*R^T - I|| < 1e-10):
+        //   T_left_right_ = Sophus::SE3d(Tbc0.inverse() * Tbc1);
+        //
+        // Fix: extract the rotation block and re-orthogonalize it via SVD (makeRotationMatrix)
+        // before constructing the SE3, so the check always passes.
+        Eigen::Matrix4d T_lr = Tbc0.inverse() * Tbc1;
+        Eigen::Matrix3d R_lr = Sophus::makeRotationMatrix(T_lr.block<3,3>(0,0));
+        T_left_right_ = Sophus::SE3d(R_lr, T_lr.block<3,1>(0,3));
     }
 
     finit_parallax_ = fsSettings["finit_parallax"];

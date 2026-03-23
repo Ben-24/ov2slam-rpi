@@ -139,6 +139,12 @@ public:
 
         vo_traj_msg_.points.push_back(p);
 
+        // Cap trajectory length to prevent FastDDS serialization buffer overflow.
+        // geometry_msgs/Point = 24 bytes; 5000 points ≈ 120KB which fits comfortably.
+        if (vo_traj_msg_.points.size() > 5000) {
+            vo_traj_msg_.points.erase(vo_traj_msg_.points.begin());
+        }
+
         pub_vo_traj_->publish(vo_traj_msg_);
 
         // 2. Publish Pose Stamped + tf
@@ -295,6 +301,12 @@ public:
         p.x = twc.x(); p.y = twc.y(); p.z = twc.z();
 
         final_kfs_traj_msg_.points.push_back(p);
+
+        // Same cap as vo_traj_msg_: prevents FastDDS serialization buffer overflow
+        // on long runs. Keyframes accumulate slowly so 5000 ≈ thousands of metres.
+        if (final_kfs_traj_msg_.points.size() > 5000) {
+            final_kfs_traj_msg_.points.erase(final_kfs_traj_msg_.points.begin());
+        }
 
         pub_final_kfs_traj_->publish(final_kfs_traj_msg_);
 
