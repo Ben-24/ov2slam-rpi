@@ -1,0 +1,132 @@
+# This is from a previous VIO implementation and has more than probably necessary
+
+name: vio
+channels:
+  - conda-forge
+  - robostack-staging
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.9
+  - pip
+
+  # ROS Noetic (from robostack)
+  - ros-noetic-desktop
+  - ros-noetic-cv-bridge
+  - ros-noetic-image-transport
+  - ros-noetic-sensor-msgs
+  - ros-noetic-geometry-msgs
+  - ros-noetic-nav-msgs
+  - ros-noetic-tf2
+  - ros-noetic-tf2-ros
+  - ros-noetic-camera-calibration
+  - ros-noetic-camera-info-manager
+  - ros-noetic-image-view
+  - ros-noetic-rqt-image-view
+  - ros-noetic-rviz
+  - ros-noetic-rosbag
+  - ros-noetic-roslaunch
+  - ros-noetic-rospy
+  - ros-noetic-catkin
+  - catkin_tools
+
+  # Build tools and compilers
+  - cmake>=3.16
+  - gcc
+  - gxx
+  - make
+  - ninja
+  - pkg-config
+
+  # Core libraries (C++)
+  - eigen>=3.3
+  - boost-cpp>=1.70
+  - opencv>=4.0
+  - pcl>=1.10
+  - ceres-solver
+  - yaml-cpp
+  - tinyxml2
+  - log4cxx
+  - console_bridge
+  - lz4
+  - bzip2
+  - curl
+  - libuuid
+
+  # OpenGL (required for OpenVINS build)
+  - mesalib
+  - libglu
+
+  # Python dependencies
+  # - numpy
+  - numpy<2
+  - scipy
+  - matplotlib
+  - pandas
+  - pyyaml
+  - psutil
+  - netifaces
+  - defusedxml
+  - empy
+  - pycryptodome
+  - pillow
+  - requests
+
+  # Computer vision
+  - scikit-image
+
+  # Development tools
+  - ipython
+  - jupyter
+  - notebook
+
+  # Visualization
+  - graphviz
+
+  # Network tools
+  - tmux
+  - htop
+
+  # Testing
+  - pytest
+  - pytest-cov
+
+  # pip packages (not available in conda)
+  - pip:
+      # BNO085 IMU - Adafruit libraries (not in conda)
+      - adafruit-circuitpython-bno08x
+      - adafruit-circuitpython-busdevice
+      - adafruit-platformdetect
+      - adafruit-blinka
+      - adafruit-extended-bus
+
+      # Raspberry Pi GPIO (not in conda)
+      - RPi.GPIO
+      - pigpio
+
+      # ROS tools
+      - vcstool
+      - rosdep
+      - rosinstall-generator
+      - wstool
+
+      # Catkin tools (if not from conda)
+      - osrf-pycommon
+
+      # Camera support
+      # Modern Raspberry Pi camera support (picamera2 for rpicam-*)
+      - picamera2  # Modern Pi camera library
+
+      # Additional utilities
+      - colorama  # For colored terminal output
+
+      # Web app dependencies (for vio_web_app)
+      - flask
+      - flask-cors
+      - websockets
+
+      # Data logging
+      - h5py
+      - msgpack
+      - msgpack-numpy
