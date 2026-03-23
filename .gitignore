@@ -317,3 +317,5 @@ AMENT_IGNORE
 
 # Ignore ov2slam results files
 *.txt
+!run.txt
+!calibration.txt

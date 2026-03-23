@@ -1,0 +1,764 @@
+
+how does the camera matrix, distortion matrix and projection matrix relate to the fx, fy, cx, cy, k1, k2, p1, p2 and other parameters in ov2slam
+Read rpi_cam_stereo.yaml
+Here's how the scalar parameters in OV2SLAM relate to the standard camera matrices:
+
+Camera (Intrinsic) Matrix K
+The camera matrix maps 3D camera-space points to 2D image pixels:
+
+
+K = [ fx   0   cx ]
+    [  0  fy   cy ]
+    [  0   0    1 ]
+In your file:
+
+Camera.fxl = 458.654 → focal length in pixels along X
+Camera.fyl = 457.296 → focal length in pixels along Y
+Camera.cxl = 367.215 → principal point X (optical center column)
+Camera.cyl = 248.375 → principal point Y (optical center row)
+Projection formula: [u, v, 1]ᵀ = K * [X/Z, Y/Z, 1]ᵀ
+
+Distortion Coefficients D
+Real lenses distort light. OpenCV's plumb-bob model (used here) has:
+
+
+D = [k1, k2, p1, p2 (, k3)]
+k1, k2 (Camera.k1l, Camera.k2l) — radial distortion (barrel/pincushion). Applied as: r² = x² + y², correction ≈ (1 + k1·r² + k2·r⁴)
+p1, p2 (Camera.p1l, Camera.p2l) — tangential distortion (lens not perfectly parallel to sensor)
+These are applied before the camera matrix, to correct the raw distorted pixel coordinates back to ideal pinhole positions.
+
+Projection Matrix P (stereo, 3×4)
+Used after stereo rectification. It combines K with the stereo baseline:
+
+
+Left:   P = [ fx   0   cx    0  ]
+            [  0  fy   cy    0  ]
+            [  0   0    1    0  ]
+
+Right:  P = [ fx   0   cx  -fx·Tx ]
+            [  0  fy   cy    0    ]
+            [  0   0    1    0    ]
+Where Tx is the baseline (distance between cameras). Your file sets bdo_stereo_rect: 0, so OV2SLAM is using the raw camera matrices + distortion directly rather than rectified projection matrices.
+
+Summary Flow
+
+3D World Point
+      ↓  (extrinsic: body_T_cam0 / body_T_cam1)
+3D Camera Point [X, Y, Z]
+      ↓  (divide by Z → normalized coords)
+Normalized [x, y] = [X/Z, Y/Z]
+      ↓  (apply k1, k2, p1, p2 distortion)
+Distorted [x', y']
+      ↓  (apply K: fx, fy, cx, cy)
+Pixel [u, v]
+The extrinsic body_T_cam0/body_T_cam1 are the 4×4 rigid-body transforms you see in the file — they're separate from calibration intrinsics.
+
+Where is this within the kalbir calibration? 
+
+Real lenses distort light. OpenCV's plumb-bob model (used here) has:
+
+
+D = [k1, k2, p1, p2 (, k3)]
+k1, k2 (Camera.k1l, Camera.k2l) — radial distortion (barrel/pincushion). Applied as: r² = x² + y², correction ≈ (1 + k1·r² + k2·r⁴)
+p1, p2 (Camera.p1l, Camera.p2l) — tangential distortion (lens not perfectly parallel to sensor)
+These are applied before the camera matrix, to correct the raw distorted pixel coordinates back to ideal pinhole positions
+Read calibration_conversion.md
+Globpattern: "/root/ov2slam-rpi/parameters_files/accurate/rpi-cam/**/*"
+Found 3 files
+Agent:Find Kalibr calibration output files
+IN
+Search for Kalibr calibration output files in /root. Look for files named camchain*.yaml, results*.txt, results*.yaml, or any yaml files that contain "kalibr" or "distortion_coeffs" or "intrinsics" in their content. Also check for any .yaml files that look like Kalibr output format (which typically has cam0/cam1 keys with intrinsics and distortion_coeffs). Search thoroughly across /root and subdirectories.
+Read left.yaml
+Read ost.txt
+In your left.yaml calibration file, the distortion coefficients are here:
+
+
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [0.026907, 0.175030, -0.006014, -0.000050, 0.000000]
+#         k1         k2         p1         p2        k3
+The order in OpenCV's plumb_bob model is always: [k1, k2, p1, p2, k3]
+
+Position	Value	Parameter	Meaning
+[0]	0.026907	k1	radial distortion (r²)
+[1]	0.175030	k2	radial distortion (r⁴)
+[2]	-0.006014	p1	tangential distortion
+[3]	-0.000050	p2	tangential distortion
+[4]	0.000000	k3	radial distortion (r⁶), effectively unused
+And the camera_matrix in the same file gives you fx, fy, cx, cy directly:
+
+
+camera_matrix:
+  data: [1216.127,    0.   ,  532.157,
+            0.   , 1219.002,  290.306,
+            0.   ,    0.   ,    1.   ]
+#    fx=1216.127         cx=532.157
+#              fy=1219.002    cy=290.306
+Note that these values (fx≈1216, fy≈1219) are very different from what's in rpi_cam_stereo.yaml (fxl=458.654). The stereo YAML appears to be using the EuRoC dataset parameters as a placeholder — your actual RPi camera calibration hasn't been transferred into that file yet.
+
+What do these relate to from kalbir?
+
+# Camera Extrinsic parameters T_b_ci ( v_b = T_b_ci * v_ci )
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975,
+           0.999557249008, 0.0149672133247, 0.025715529948,  -0.064676986768,
+           -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949,
+           0., 0., 0., 1.]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.0125552670891, -0.999755099723, 0.0182237714554, -0.0198435579556,
+           0.999598781151, 0.0130119051815, 0.0251588363115, 0.0453689425024,
+          -0.0253898008918, 0.0179005838253, 0.999517347078, 0.00786212447038,
+          0., 0., 0., 1.]
+Read calibrate_stereo.py
+The current body_T_cam0/body_T_cam1 values in the YAML are still the EuRoC dataset placeholders — your own calibration hasn't filled them in yet. Your calibrate_stereo.py script generates them from OpenCV's stereoCalibrate, not from Kalibr.
+
+Here's how they map:
+
+Kalibr camera-only output (camchain.yaml)
+Kalibr gives you T_cn_cnm1 — the relative transform from cam(n-1) to cam(n):
+
+
+cam1:
+  T_cn_cnm1:   # = T_cam1_cam0 (cam1 relative to cam0)
+  - [r00, r01, r02, tx]
+  - [r10, r11, r12, ty]
+  - [r20, r21, r22, tz]
+  - [0.0, 0.0, 0.0, 1.0]
+This is exactly the R and T that cv2.stereoCalibrate() returns. Your script uses them directly:
+
+
+# calibrate_stereo.py lines 152-156
+body_T_cam0 = np.eye(4)          # left camera IS the reference frame
+
+body_T_cam1 = np.eye(4)
+body_T_cam1[:3, :3] = R          # rotation between cameras
+body_T_cam1[:3, 3] = T.flatten() # translation (baseline vector)
+Kalibr camera-IMU output (camchain-imucam.yaml)
+If you add an IMU (e.g. with kalibr_calibrate_imu_camera), Kalibr additionally gives:
+
+
+cam0:
+  T_imu_cam:   # ← this is body_T_cam0
+  - [...]
+cam1:
+  T_imu_cam:   # ← this is body_T_cam1
+  - [...]
+These directly map to OV2SLAM's body_T_camN where "body" = IMU frame.
+
+Your setup (no IMU)
+Since you're running camera-only, the script sets body_T_cam0 = identity (left camera is the body/reference frame), and body_T_cam1 encodes the stereo geometry (how far and at what angle the right camera sits relative to the left).
+
+The EuRoC values currently in rpi_cam_stereo.yaml have a non-identity body_T_cam0 because EuRoC used an IMU as the body frame — those values are wrong for your setup and need to be replaced by running calibrate_stereo.py against your captured images.
+
+I do want to run IMU, do I need to use the calibrate_stereo script or is there a way to just use kalibr? I think first I will need to make a node for IMU processing with bnO085
+Agent:Explore OV2SLAM RPI project structure
+IN
+Explore the project at /root/ov2slam-rpi. I need to understand:
+1. The overall directory structure (list all directories and key files)
+2. Any existing ROS node code (look for package.xml, CMakeLists.txt, launch files, src/ directories with .cpp or .py files)
+3. Any IMU-related code or configuration
+4. What ROS version is being used (ROS1 or ROS2)
+5. Any existing camera node or publisher code
+
+Read the key files to understand the project architecture. Be thorough.
+To do camera-IMU calibration properly, use Kalibr — your calibrate_stereo.py only does camera-camera stereo and has no IMU support. Here's the full picture:
+
+Why Kalibr (not the script)
+Kalibr's kalibr_calibrate_imu_camera gives you:
+
+T_imu_cam0 → body_T_cam0 in OV2SLAM
+T_imu_cam1 → body_T_cam1 in OV2SLAM
+IMU noise/bias parameters (needed for VIO)
+Your script can only produce stereo camera geometry — it has no way to find the IMU↔camera transform.
+
+The workflow you need
+
+1. Build BNO085 ROS2 node  ← you need to write this
+         ↓
+2. Record ROS2 bag (cameras + IMU, waving calibration target)
+         ↓
+3. Run Kalibr camera-IMU calibration
+         ↓
+4. Take T_imu_cam0 / T_imu_cam1 → paste into rpi_cam_stereo.yaml
+         ↓
+5. Add IMU subscriber to ov2slam_node (currently a TODO in the code)
+BNO085 ROS2 node — what you need
+The BNO085 uses the SH-2 (Sensor Hub 2) protocol. On RPi it connects via I2C or UART. The Adafruit library handles it:
+
+
+pip install adafruit-circuitpython-bno08x
+The node needs to publish sensor_msgs/msg/Imu at ≥200 Hz for Kalibr to work well. It should output:
+
+angular_velocity (gyroscope) — this is the most important for Kalibr
+linear_acceleration (accelerometer)
+Covariance matrices (can start with -1 = unknown, refine later)
+The BNO085 has an onboard fusion processor, but for Kalibr you want raw gyro + accel, not the fused quaternion output, so you'd enable REPORT_GYROSCOPE and REPORT_ACCELEROMETER modes specifically.
+
+Kalibr + ROS2
+Kalibr traditionally requires ROS1 bags, but there are two routes:
+
+Option A — Use the ROS2-compatible Kalibr fork:
+
+
+https://github.com/zhaozhongch/kalibr_ros2
+Option B — Record a ROS2 bag, convert with rosbags:
+
+
+pip install rosbags
+rosbags-convert --src my_bag/ --dst my_bag.bag  # ros2 → ros1 format
+Suggested next step
+Build the BNO085 ROS2 node first — want me to write that? I'd need to know:
+
+Is it connected via I2C or UART/SPI?
+What topic name do you want (e.g. /imu/data)?
+Do you have an existing ROS2 package to add it to, or should it be a standalone package?
+Is there a cpp file for IMU currently in ov2slam that I could adapt to our IMU?
+Grep "imu|IMU|Imu" (in /root/ov2slam-rpi, glob: *.cpp)
+5 lines of output
+Grep "imu|IMU|Imu" (in /root/ov2slam-rpi, glob: *.hpp)
+5 lines of output
+Grep "imu|IMU|Imu" (in /root/ov2slam-rpi/src/ov2slam_node.cpp)
+1 line of output
+Grep "imu|IMU|Imu" (in /root/ov2slam-rpi/include/frame.hpp)
+1 line of output
+Grep "imu|IMU|Imu" (in /root/ov2slam-rpi/include/ros_visualizer.hpp)
+1 line of output
+The answer is no — there's no IMU implementation to adapt. The only IMU-related code in the entire project is:
+
+File	What's there
+ov2slam_node.cpp:42	#include <sensor_msgs/msg/imu.hpp> — header included but nothing uses it
+ros_visualizer.hpp:35	Same include, also unused
+frame.hpp:219	A TODO comment about future IMU body frame integration
+The IMU includes were added in anticipation of future work but nothing was ever built. There's no subscriber, no callback, no queue, no preintegration — it's completely stubbed out.
+
+What you actually need to build
+There are two separate things:
+
+1. A standalone BNO085 publisher node (separate package)
+
+Reads from the sensor over I2C/UART
+Publishes sensor_msgs/msg/Imu on e.g. /imu/data
+Needed for Kalibr calibration and for feeding OV2SLAM later
+2. IMU integration inside OV2SLAM itself (much bigger job)
+
+Add an Imu subscription + queue to SensorsGrabber in ov2slam_node.cpp (modelled after the existing image queue pattern)
+IMU preintegration between camera frames (requires adding a preintegration class — this is a significant algorithm addition)
+Modify the optimizer to include IMU factors
+The BNO085 publisher node is well-defined and doable now. The OV2SLAM IMU integration is a research-level task — want me to start with the publisher node?
+
+So as long as I make an ROS node that publishes to sensor_msgs/msg/Imu then I am good?
+For Kalibr calibration — yes, that's all you need. Record a bag with:
+
+/imu/data → sensor_msgs/msg/Imu
+/cam0/image_raw and /cam1/image_raw → sensor_msgs/msg/Image
+Then run kalibr_calibrate_imu_camera against that bag.
+
+For OV2SLAM actually using the IMU — no, publishing the topic is not enough. As we found, OV2SLAM currently does nothing with IMU data. You'd also need to:
+
+Add an IMU subscription + timestamped queue to ov2slam_node.cpp (similar to the existing image queues)
+Add IMU preintegration between camera frames (the SlamManager has no preintegration logic at all currently)
+Add IMU factors to the Ceres optimizer in optimizer.cpp
+That's a significant chunk of work. The good news is that the immediate goal (getting Kalibr calibration done so you have correct body_T_cam0/body_T_cam1 values) only requires step 1 — publish the topic, record the bag, run Kalibr.
+
+Suggested order:
+
+Write BNO085 publisher node → publishes sensor_msgs/msg/Imu
+Run Kalibr → get correct extrinsics into the YAML
+Get OV2SLAM running in stereo-only mode with correct calibration
+Later: add IMU integration to OV2SLAM
+Want me to write the BNO085 publisher node now?
+
+Are you sure it doesnt already handle IMU data, it advertises that it does?
+Read ov2slam_node.cpp
+Read README.md
+I was wrong to leave any ambiguity — the README is definitive. OV²SLAM is purely visual, no IMU support at all:
+
+"OV²SLAM is a fully real-time Visual SLAM algorithm for Stereo and Monocular cameras."
+
+The #include <sensor_msgs/msg/imu.hpp> is a dead include — nothing in the codebase subscribes to or processes IMU data.
+
+But the README does have important Kalibr guidance at README.md:183-187 that changes what you need:
+
+You only need camera-only Kalibr calibration (kalibr_calibrate_cameras), not camera-IMU.
+
+And it tells you exactly how to map Kalibr output to OV²SLAM:
+
+
+Kalibr camera-only output → OV²SLAM
+────────────────────────────────────────────────────
+T_cn_cnm1  (cam1 relative to cam0)  → body_T_cam0
+I_4x4      (identity)               → body_T_cam1
+So for your setup the convention is: body = cam_right, and T_cn_cnm1 from Kalibr goes directly into body_T_cam0.
+
+This also means the calibrate_stereo.py script has the convention backwards — it sets cam_left as body (cam0=identity, cam1=R|T), but the README says it should be cam_right as body (cam1=identity, cam0=T_cn_cnm1).
+
+Bottom line on IMU: If you want IMU-aided odometry on this hardware, you'd need a different SLAM system (e.g. VINS-Fusion, OpenVINS, or ORB-SLAM3 with IMU) rather than adding it to OV²SLAM yourself. OV²SLAM has no IMU pipeline to hook into.
+
+OV2SLAM seems to work better than VINS-Fusion, OpenVINS, or ORB-SLAM3, possibly we can modify it to include IMU to see if that works well, but for now if it isnt intended for use with IMUs what does this represent within the .yaml file?
+
+# Camera Extrinsic parameters T_b_ci ( v_b = T_b_ci * v_ci )
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975,
+           0.999557249008, 0.0149672133247, 0.025715529948,  -0.064676986768,
+           -0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949,
+           0., 0., 0., 1.]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.0125552670891, -0.999755099723, 0.0182237714554, -0.0198435579556,
+           0.999598781151, 0.0130119051815, 0.0251588363115, 0.0453689425024,
+          -0.0253898008918, 0.0179005838253, 0.999517347078, 0.00786212447038,
+          0., 0., 0., 1.]
+Grep "body_T_cam|T_body_cam|T_b_ci|T_bc" (in /root/ov2slam-rpi/src)
+2 lines of output
+Read slam_params.cpp
+Now the code tells the exact story. Look at slam_params.cpp:87:
+
+
+T_left_right_ = Sophus::SE3d(Tbc0.inverse() * Tbc1);
+That's the only thing OV²SLAM ever does with both matrices. It immediately combines them into a single camera-to-camera transform. The "body" frame is purely mathematical scaffolding that cancels out:
+
+
+T_left_right = Tbc0⁻¹ × Tbc1
+             = T_cam0_body × T_body_cam1
+             = T_cam0_cam1
+So body_T_cam0 and body_T_cam1 are just two ways of expressing the stereo geometry — the rotation and translation between your two cameras. The "body" label is inherited from EuRoC/IMU conventions but OV²SLAM doesn't use the body frame for anything else.
+
+What this means practically:
+
+Only the relative values matter, not the absolute ones. These two setups are equivalent:
+
+
+Option A (calibrate_stereo.py convention):
+  body_T_cam0 = Identity
+  body_T_cam1 = [R | T]         ← R,T from stereoCalibrate
+  → T_left_right = I⁻¹ × [R|T] = T_cam0_cam1  ✓
+
+Option B (README/Kalibr convention):
+  body_T_cam0 = T_cn_cnm1       ← from Kalibr camchain.yaml
+  body_T_cam1 = Identity
+  → T_left_right = T_cn_cnm1⁻¹ × I = T_cam0_cam1  ✓
+The current EuRoC values still worked for EuRoC because their body (IMU frame) cancelled out correctly — but they encode the wrong stereo geometry for your RPi cameras and need to be replaced with your actual calibration output.
+
+Ok this still doesnt tell me how to fill out these matrices, are these physical measurements I make? Are they taken from kalibr?
+They come from running stereo calibration — not physical measurements. You can't measure them by hand accurately enough.
+
+You have two paths:
+
+Path 1: Run your existing calibrate_stereo.py (simplest)
+Your script already does this and outputs the matrices directly. You just need to extract the calibration images from the archive and run it:
+
+
+cd /root/ov2slam-rpi/calibration
+tar -xzf calibrationdata.tar.gz
+# check what folder structure it unpacks to, then:
+python3 calibrate_stereo.py
+It outputs body_T_cam0 and body_T_cam1 ready to paste into the YAML. Internally it runs cv2.stereoCalibrate() which computes:
+
+R — the rotation between cam0 and cam1 coordinate frames (how much one is tilted relative to the other)
+T — the translation vector (baseline direction and distance in metres)
+Then sets body_T_cam0 = Identity, body_T_cam1 = [R|T].
+
+Path 2: Kalibr camera-only calibration
+Run kalibr_calibrate_cameras, get a camchain.yaml with:
+
+
+cam1:
+  T_cn_cnm1:       # ← this is R and T between cam0 and cam1
+  - [r00, r01, r02, tx]
+  - [r10, r11, r12, ty]
+  - [r20, r21, r22, tz]
+  - [0.0, 0.0, 0.0, 1.0]
+Then per the README:
+
+
+body_T_cam0: T_cn_cnm1   ← paste the matrix here
+body_T_cam1: Identity    ← [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
+What the numbers physically mean
+
+body_T_cam1 (Option A):
+   rows: 4
+   data: [ r00  r01  r02  tx,    ← tx,ty,tz = baseline vector in metres
+           r10  r11  r12  ty,       e.g. tx ≈ 0.06 for 6cm apart cameras
+           r20  r21  r22  tz,    ← r__ = rotation (how cameras are angled
+           0    0    0    1  ]          relative to each other)
+For two cameras on a flat bar pointing the same direction, R ≈ identity and T ≈ [baseline, 0, 0]. In practice R is never perfectly identity because mounting isn't perfect — that's why you calibrate rather than measure.
+
+Your quickest path is Path 1. Do you know what folder structure calibrationdata.tar.gz unpacks to? I can check if the images are in the right place for the script to find them.
+
+how does calibrate_stereo.py work? Does it take what I have already done in kalibr calibration or does it make me do it again? I dont see why I would need to run it again if I already have all of the kalibr data for both left and right
+Globpattern: "/root/ov2slam-rpi/calibration/**/*"
+Found 91 files
+Read stereo_calibration.sh
+Read left.yaml
+Read ost.txt
+There are two important things to clarify here:
+
+1. This is ROS cameracalibrator, not Kalibr
+
+Looking at stereo_calibration.sh:16 — the tool used was:
+
+
+ros2 run camera_calibration cameracalibrator ...
+That's ROS's built-in stereo calibrator, a completely different tool from Kalibr.
+
+2. The ROS output does NOT contain body_T_cam matrices
+
+What left.yaml / ost.txt contain:
+
+Field	In files?	Needed for YAML?
+fx, fy, cx, cy	✓ already copied in	done
+k1, k2, p1, p2	✓ already copied in	done
+rectification_matrix	✓	not directly
+projection_matrix	✓	not directly
+raw R and T between cameras	✗ not stored	this is what's missing
+The raw R and T were used internally to compute the rectification matrices but weren't saved to any file.
+
+What you need to do:
+
+Run calibrate_stereo.py — but you don't need to recapture images. The 42 image pairs from your original calibration session are already sitting in initial_calibration/. The script just needs to be pointed at them instead of the default calibration_images/ path.
+
+The images exist: initial_calibration/left-0000.png ... left-0041.png and matching right images. The script's IMAGES_DIR just needs to change. Want me to update it to use the existing images?
+
+can you modify the calibrate_stereo.py file to take a command line argument that points to the directory with the images
+Read calibrate_stereo.py
+Two things need fixing: the hardcoded path, and the pair-matching logic which breaks with left-0000.png style names (the replace("left_", "") trick doesn't work with hyphens).
+
+Edit calibrate_stereo.py
+Added 8 lines
+Edit calibrate_stereo.py
+Added 30 lines
+Now verify the full file looks right:
+
+Read calibrate_stereo.py
+Good. Now you can run it against your existing images:
+
+
+python3 /root/ov2slam-rpi/calibration/calibrate_stereo.py \
+  --images-dir /root/ov2slam-rpi/calibration/initial_calibration
+It will auto-detect the flat left-XXXX.png / right-XXXX.png layout and pair them by sorted index. The result gets printed to the terminal and saved to calibration/calibration_result.txt — then you copy body_T_cam0 and body_T_cam1 from that output into rpi_cam_stereo.yaml.
+
+Why couldnt it find corners if this is from camera calibration? Do we have enough pairs for stuff?
+
+(vio) root@ratpi5:~/ov2slam-rpi# python3 /root/ov2slam-rpi/calibration/calibrate_stereo.py \
+  --images-dir /root/ov2slam-rpi/calibration/initial_calibration
+Using flat layout: /root/ov2slam-rpi/calibration/initial_calibration/left-*.png and /root/ov2slam-rpi/calibration/initial_calibration/right-*.png
+Found 42 image pairs
+Board size: 10x6 inner corners, 2.5cm squares
+
+Finding corners in left images...
+  WARNING: No corners found in left-0000.png - skipping
+  WARNING: No corners found in left-0001.png - skipping
+  WARNING: No corners found in left-0002.png - skipping
+  WARNING: No corners found in left-0009.png - skipping
+  WARNING: No corners found in left-0010.png - skipping
+  WARNING: No corners found in left-0011.png - skipping
+  WARNING: No corners found in left-0012.png - skipping
+  WARNING: No corners found in left-0013.png - skipping
+  WARNING: No corners found in left-0014.png - skipping
+  WARNING: No corners found in left-0018.png - skipping
+  WARNING: No corners found in left-0019.png - skipping
+  WARNING: No corners found in left-0020.png - skipping
+  WARNING: No corners found in left-0021.png - skipping
+  WARNING: No corners found in left-0022.png - skipping
+  WARNING: No corners found in left-0023.png - skipping
+  WARNING: No corners found in left-0024.png - skipping
+  WARNING: No corners found in left-0029.png - skipping
+  WARNING: No corners found in left-0030.png - skipping
+  WARNING: No corners found in left-0031.png - skipping
+  WARNING: No corners found in left-0035.png - skipping
+  WARNING: No corners found in left-0036.png - skipping
+  WARNING: No corners found in left-0037.png - skipping
+  WARNING: No corners found in left-0039.png - skipping
+  WARNING: No corners found in left-0040.png - skipping
+  WARNING: No corners found in left-0041.png - skipping
+Finding corners in right images...
+  WARNING: No corners found in right-0001.png - skipping
+  WARNING: No corners found in right-0011.png - skipping
+  WARNING: No corners found in right-0012.png - skipping
+  WARNING: No corners found in right-0013.png - skipping
+  WARNING: No corners found in right-0014.png - skipping
+  WARNING: No corners found in right-0016.png - skipping
+  WARNING: No corners found in right-0017.png - skipping
+  WARNING: No corners found in right-0019.png - skipping
+  WARNING: No corners found in right-0022.png - skipping
+  WARNING: No corners found in right-0023.png - skipping
+  WARNING: No corners found in right-0024.png - skipping
+  WARNING: No corners found in right-0025.png - skipping
+  WARNING: No corners found in right-0028.png - skipping
+  WARNING: No corners found in right-0030.png - skipping
+  WARNING: No corners found in right-0031.png - skipping
+  WARNING: No corners found in right-0032.png - skipping
+  WARNING: No corners found in right-0033.png - skipping
+  WARNING: No corners found in right-0034.png - skipping
+  WARNING: No corners found in right-0036.png - skipping
+  WARNING: No corners found in right-0038.png - skipping
+  WARNING: No corners found in right-0039.png - skipping
+  WARNING: No corners found in right-0040.png - skipping
+  WARNING: No corners found in right-0041.png - skipping
+
+Valid pairs for calibration: 9 / 42
+WARNING: fewer than 10 valid pairs - results may be unreliable
+Image size: 800x600
+
+Calibrating left camera...
+  Left reprojection error: 0.2539px
+Calibrating right camera...
+  Right reprojection error: 0.2367px
+Running stereo calibration...
+  Stereo reprojection error: 9.2405px
+
+WARNING: reprojection error > 1px - consider recapturing with better coverage
+============================================================
+CALIBRATION RESULTS - paste into your OV2SLAM YAML file
+============================================================
+
+Camera.topic_left: /left/image_raw
+Camera.topic_right: /right/image_raw
+
+Camera.model_left: pinhole
+Camera.model_right: pinhole
+
+Camera.left_nwidth: 800
+Camera.left_nheight: 600
+Camera.right_nwidth: 800
+Camera.right_nheight: 600
+
+Camera.fxl: 1236.037944
+Camera.fyl: 1241.433141
+Camera.cxl: 550.479111
+Camera.cyl: 293.013706
+
+Camera.k1l: 0.0179724422
+Camera.k2l: 0.3445341164
+Camera.p1l: -0.0076646501
+Camera.p2l: 0.0034362316
+
+Camera.fxr: 1220.093701
+Camera.fyr: 1225.091184
+Camera.cxr: 544.787201
+Camera.cyr: 292.979046
+
+Camera.k1r: 0.0019728370
+Camera.k2r: 0.5241441839
+Camera.p1r: -0.0066914141
+Camera.p2r: 0.0035542851
+
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.9626123300, 0.0228179388, 0.2699200691, -0.2015455241, -0.0360477281, 0.9983739909, 0.0441580758, -0.0309518947, -0.2684735804, -0.0522371135, 0.9618696485, 0.0101970217, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+
+# Baseline: 20.42cm
+# Stereo reprojection error: 9.2405px
+============================================================
+
+Results also saved to /root/ov2slam-rpi/calibration/calibration_result.txt
+(vio) root@ratpi5:~/ov2slam-rpi#
+Two problems are visible in the output:
+
+1. Board size mismatch — this is why most images failed
+
+Your stereo_calibration.sh:16 ran:
+
+
+--size 11x7
+In ROS cameracalibrator, --size means inner corners, so your board has 11×7 inner corners. But the script is hunting for 10×6. That's why so many images got skipped — it was looking for the wrong grid.
+
+2. 9 pairs + wrong board = 9.24px error
+
+With the correct board size many more images should succeed, which will also fix the reprojection error. 9 pairs is not enough.
+
+Let me fix the board size:
+
+Edit calibrate_stereo.py
+Edit failed
+How did it find even fewer? 
+
+(vio) root@ratpi5:~/ov2slam-rpi# python3 /root/ov2slam-rpi/calibration/calibrate_stereo.py   --images-dir /root/ov2slam-rpi/calibration/initial_calibration
+Using flat layout: /root/ov2slam-rpi/calibration/initial_calibration/left-*.png and /root/ov2slam-rpi/calibration/initial_calibration/right-*.png
+Found 42 image pairs
+Board size: 11x7 inner corners, 2.5cm squares
+
+Finding corners in left images...
+  WARNING: No corners found in left-0000.png - skipping
+  WARNING: No corners found in left-0001.png - skipping
+  WARNING: No corners found in left-0003.png - skipping
+  WARNING: No corners found in left-0004.png - skipping
+  WARNING: No corners found in left-0005.png - skipping
+  WARNING: No corners found in left-0006.png - skipping
+  WARNING: No corners found in left-0007.png - skipping
+  WARNING: No corners found in left-0008.png - skipping
+  WARNING: No corners found in left-0009.png - skipping
+  WARNING: No corners found in left-0013.png - skipping
+  WARNING: No corners found in left-0015.png - skipping
+  WARNING: No corners found in left-0017.png - skipping
+  WARNING: No corners found in left-0018.png - skipping
+  WARNING: No corners found in left-0019.png - skipping
+  WARNING: No corners found in left-0024.png - skipping
+  WARNING: No corners found in left-0025.png - skipping
+  WARNING: No corners found in left-0026.png - skipping
+  WARNING: No corners found in left-0028.png - skipping
+  WARNING: No corners found in left-0029.png - skipping
+  WARNING: No corners found in left-0032.png - skipping
+  WARNING: No corners found in left-0036.png - skipping
+  WARNING: No corners found in left-0038.png - skipping
+  WARNING: No corners found in left-0039.png - skipping
+  WARNING: No corners found in left-0040.png - skipping
+  WARNING: No corners found in left-0041.png - skipping
+Finding corners in right images...
+  WARNING: No corners found in right-0000.png - skipping
+  WARNING: No corners found in right-0002.png - skipping
+  WARNING: No corners found in right-0004.png - skipping
+  WARNING: No corners found in right-0005.png - skipping
+  WARNING: No corners found in right-0006.png - skipping
+  WARNING: No corners found in right-0008.png - skipping
+  WARNING: No corners found in right-0009.png - skipping
+  WARNING: No corners found in right-0015.png - skipping
+  WARNING: No corners found in right-0018.png - skipping
+  WARNING: No corners found in right-0019.png - skipping
+  WARNING: No corners found in right-0024.png - skipping
+  WARNING: No corners found in right-0026.png - skipping
+  WARNING: No corners found in right-0027.png - skipping
+  WARNING: No corners found in right-0030.png - skipping
+  WARNING: No corners found in right-0033.png - skipping
+  WARNING: No corners found in right-0035.png - skipping
+  WARNING: No corners found in right-0036.png - skipping
+  WARNING: No corners found in right-0039.png - skipping
+  WARNING: No corners found in right-0040.png - skipping
+  WARNING: No corners found in right-0041.png - skipping
+
+Valid pairs for calibration: 12 / 42
+Image size: 800x600
+
+Calibrating left camera...
+  Left reprojection error: 0.3569px
+Calibrating right camera...
+  Right reprojection error: 0.3586px
+Running stereo calibration...
+  Stereo reprojection error: 50.8244px
+
+WARNING: reprojection error > 1px - consider recapturing with better coverage
+============================================================
+CALIBRATION RESULTS - paste into your OV2SLAM YAML file
+============================================================
+
+Camera.topic_left: /left/image_raw
+Camera.topic_right: /right/image_raw
+
+Camera.model_left: pinhole
+Camera.model_right: pinhole
+
+Camera.left_nwidth: 800
+Camera.left_nheight: 600
+Camera.right_nwidth: 800
+Camera.right_nheight: 600
+
+Camera.fxl: 1213.283231
+Camera.fyl: 1216.018268
+Camera.cxl: 523.393116
+Camera.cyl: 302.976810
+
+Camera.k1l: 0.0216589740
+Camera.k2l: 0.3300535875
+Camera.p1l: -0.0008090066
+Camera.p2l: -0.0019079032
+
+Camera.fxr: 1215.207965
+Camera.fyr: 1217.578553
+Camera.cxr: 514.829448
+Camera.cyr: 299.621084
+
+Camera.k1r: 0.0219352294
+Camera.k2r: 0.5034484191
+Camera.p1r: -0.0005776428
+Camera.p2r: -0.0022608263
+
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.9992040046, 0.0065307390, -0.0393536094, -0.0024786468, -0.0068822602, 0.9999375642, -0.0088035297, -0.0002567151, 0.0392936588, 0.0090673639, 0.9991865648, 0.0015834580, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+
+# Baseline: 0.30cm
+# Stereo reprojection error: 50.8244px
+============================================================
+
+Results also saved to /root/ov2slam-rpi/calibration/calibration_result.txt
+(vio) root@ratpi5:~/ov2slam-rpi# 
+
+Here is the script used to get the images
+
+# This script allows for stereo camera calibration
+
+# Activate udev rules for cameras
+/lib/systemd/systemd-udevd --daemon && udevadm trigger && udevadm settle
+
+# Source ros and workspace setup files, and set the library path for the camera IPA module
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash
+export LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib/aarch64-linux-gnu/libcamera/ipa/
+
+# Run the two camera nodes seperately then run camera calibrator
+# Currently, this is configured to work with VNC, 
+#   but it can be modified to work with a monitor and keyboard/mouse, 
+#   or previously it has worked with X11 forwarding, but it has proven unrelibale in comparison
+ros2 run camera_ros camera_node --ros-args   -r /camera/image_raw:=/cam0/image_raw   -r /camera/camera_info:=/cam0/camera_info   -p camera:=/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a &
+ros2 run camera_ros camera_node --ros-args   -r /camera/image_raw:=/cam1/image_raw   -r /camera/camera_info:=/cam1/camera_info   -p camera:=/base/axi/pcie@120000/rp1/i2c@80000/imx708@1a &
+ros2 run camera_calibration cameracalibrator   --size 11x7   --square 0.025   --approximate 0.1   --ros-args   -r left:=/cam0/image_raw   -r right:=/cam1/image_raw   -r left_camera:=/cam0   -r right_camera:=/cam1 &
+wait
+Something more fundamental is wrong. The results are contradictory — 11×7 found MORE pairs but gave a 50px error and a 0.3cm baseline (essentially zero, which is physically impossible). Let me look at an actual calibration image to diagnose this properly.
+
+Read left-0002.png
+Read right-0002.png
+The images reveal what's happening:
+
+Read left-0010.png
+Read right-0010.png
+Now I can see the problem clearly. Look at pair 0010 — the left camera has the full board centered in frame, but the right camera has the board cut off at the top. The board occupies completely different positions in each frame.
+
+This is a recapture problem, not a code problem. Three issues visible in the images:
+
+1. The board is frequently only partially in frame for one camera
+Pair 0010 shows right camera missing the top rows entirely. OpenCV's findChessboardCorners requires the complete board to be visible — even one missing row means detection fails.
+
+2. Significant vertical offset between cameras
+The board appears at different heights in left vs right, suggesting the cameras aren't parallel — they're pointing in slightly different directions. This also explains the 40-degree off-diagonal values in the rectification matrix from your ost.txt.
+
+3. Why 11×7 found more pairs but got 50px error
+With the wrong grid size, some images get "false positive" detections (finding a sub-pattern). With the correct 11×7 size, more real detections occur, but the camera views are so different that OpenCV assigns corners in opposite orders (180° flip) between left and right — which destroys stereo calibration.
+
+You need to recapture with these rules:
+
+The full board must be simultaneously visible in both cameras at once — hold it up and confirm before saving each image
+Move the board to varied positions and angles (all 4 corners of both frames, tilted in X and Y)
+Avoid reflective surfaces — the glare in the table images (pair 0002) hurts detection
+Target 30+ valid stereo pairs
+The existing images genuinely can't produce a reliable stereo calibration. The data issue predates our script.
+

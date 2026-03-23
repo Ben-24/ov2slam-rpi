@@ -1,0 +1,24 @@
+/lib/systemd/systemd-udevd --daemon && udevadm trigger && udevadm settle
+
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash
+export LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib/aarch64-linux-gnu/libcamera/ipa/
+ros2 run camera_ros camera_node --ros-args \
+  -r /camera/image_raw:=/cam0/image_raw \
+  -p camera:=/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a \
+  -p SyncMode:=1
+
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash
+export LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib/aarch64-linux-gnu/libcamera/ipa/
+ros2 run camera_ros camera_node --ros-args \
+  -r /camera/image_raw:=/cam1/image_raw \
+  -p camera:=/base/axi/pcie@120000/rp1/i2c@80000/imx708@1a \
+  -p SyncMode:=2
+
+source /opt/ros/humble/setup.bash
+source /root/ov2slam-rpi/install/setup.bash
+export LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib/aarch64-linux-gnu/libcamera/ipa/
+ros2 run ov2slam ov2slam_node \
+  /root/ov2slam-rpi/parameters_files/accurate/rpi-cam/rpi_cam_stereo.yaml
+
+source /opt/ros/humble/setup.bash
+rviz2 -d /root/ov2slam-rpi/ov2slam.rviz
