@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/cmake,c++,python,visualstudiocode,ros2,ros
 # Edit at https://www.toptal.com/developers/gitignore?templates=cmake,c++,python,visualstudiocode,ros2,ros
 
+## For calibration
+*.png
+
 ### C++ ###
 # Prerequisites
 *.d
