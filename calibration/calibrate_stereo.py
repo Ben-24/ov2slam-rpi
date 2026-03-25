@@ -182,7 +182,7 @@ def main():
     # refines intrinsics + extrinsics together, giving much lower stereo error than
     # CALIB_FIX_INTRINSIC which locks intrinsics and can't compensate for their errors.
     print("Running stereo calibration...")
-    flags = cv2.CALIB_FIX_INTRINSIC
+    flags = cv2.CALIB_USE_INTRINSIC_GUESS
     ret_stereo, K_l, D_l, K_r, D_r, R, T, E, F = cv2.stereoCalibrate(
         obj_pts, img_pts_left, img_pts_right,
         K_l, D_l, K_r, D_r,

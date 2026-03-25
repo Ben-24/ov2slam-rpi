@@ -129,3 +129,19 @@ reprojection error comments at the bottom of the block.
   covered during calibration — recapture with more images in the upper region.
 - The `p1`/`p2` tangential distortion values should be small (< 0.01). Large values
   suggest physical misalignment between the two camera modules.
+
+---
+
+## Expected camera startup warnings (all harmless)
+
+When starting the camera nodes you will see several warnings. None of these affect
+calibration or SLAM. Here is what they mean:
+
+| Warning | Why it appears | Why it is safe to ignore |
+|---|---|---|
+| `Unsupported V4L2 pixel format RPBP` | The raw Bayer packed format used internally by the ISP is not exposed to V4L2 userspace. | The camera still streams correctly in the selected format (XRGB8888). |
+| `no pixel format selected, auto-selecting XRGB8888` | No `format` parameter was passed to camera_ros, so it picks the first supported colour format. | XRGB8888 is the `bgra8` encoding ov2slam receives and converts to grayscale correctly. |
+| `no dimensions selected, auto-selecting 800x600` | No `width`/`height` parameter was passed, so the node picks a default. | 800×600 is the correct resolution matching our calibration. |
+| `Camera calibration file ... not found` | camera_ros looks for a ROS-format `camera_info` YAML in `~/.ros/camera_info/`. We do not use this file. | OV2SLAM reads calibration from `rpi_cam_stereo.yaml` directly — the ROS camera_info file is never used. |
+| `AfWindows`, `AF_PAUSE`, `AF_TRIGGER` warnings | The IMX708 driver exposes autofocus controls that camera_ros tries to set, but the IMX708 modules in this rig have fixed-focus lenses. | Fixed focus is exactly what we want for SLAM. These controls simply have no effect. |
+| `Sync mode set to server` | libcamera IPA confirming that hardware frame sync is active (cam0 = master/server, cam1 = slave/client). | This is the **desired** state — it confirms both cameras are locked to the same frame clock. |

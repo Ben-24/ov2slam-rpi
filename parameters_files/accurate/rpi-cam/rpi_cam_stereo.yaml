@@ -5,8 +5,8 @@
 # Camera Parameters. Adjust them!
 #--------------------------------------------------------------------------------------------
 
-Camera.topic_left: /cam0/image_raw
-Camera.topic_right: /cam1/image_raw
+Camera.topic_left: /cam1/image_raw
+Camera.topic_right: /cam0/image_raw
 
 Camera.model_left: pinhole
 Camera.model_right: pinhole
@@ -16,25 +16,25 @@ Camera.left_nheight: 600
 Camera.right_nwidth: 800
 Camera.right_nheight: 600
 
-Camera.fxl: 1241.086781
-Camera.fyl: 1242.678996
-Camera.cxl: 512.783501
-Camera.cyl: 222.129366
+Camera.fxl: 1240.693312
+Camera.fyl: 1242.935090
+Camera.cxl: 502.875929
+Camera.cyl: 218.045056
 
-Camera.k1l: 0.0510397144
-Camera.k2l: -0.0474229118
-Camera.p1l: -0.0227970724
-Camera.p2l: -0.0041487839
+Camera.k1l: 0.0639980828
+Camera.k2l: -0.1030374162
+Camera.p1l: -0.0229625505
+Camera.p2l: -0.0059209159
 
-Camera.fxr: 1242.532829
-Camera.fyr: 1245.146982
-Camera.cxr: 503.812748
-Camera.cyr: 218.514727
+Camera.fxr: 1242.482172
+Camera.fyr: 1244.109997
+Camera.cxr: 513.156169
+Camera.cyr: 222.264871
 
-Camera.k1r: 0.0613040897
-Camera.k2r: 0.0037916671
-Camera.p1r: -0.0239747344
-Camera.p2r: -0.0057442697
+Camera.k1r: 0.0182392817
+Camera.k2r: 0.4558669783
+Camera.p1r: -0.0230022984
+Camera.p2r: -0.0046476242
 
 body_T_cam0: !!opencv-matrix
    rows: 4
@@ -46,15 +46,16 @@ body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [0.9999452052, 0.0069791657, -0.0078024193, -0.0296736065, -0.0068640076, 0.9998685374, 0.0146899022, 0.0002702102, 0.0079039168, -0.0146355414, 0.9998616549, 0.0005161040, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+   data: [0.9999518676, -0.0068894817, 0.0069855238, 0.0295733040, 0.0069955405, 0.9998588795, -0.0152736224, 0.0000809720, -0.0068793107, 0.0153217547, 0.9998589495, 0.0011102240, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
 
-# Baseline: 2.97cm
-# Stereo reprojection error: 1.0084px
+# Baseline: 2.96cm
+# Stereo reprojection error: 1.0128px
+# Note: cam1 is the physical left camera, cam0 is the physical right camera
 
 #--------------------------------------------------------------------------------------------
 # SLAM Parameters. Adjust them!
 #--------------------------------------------------------------------------------------------
-debug: 0
+debug: 1
 log_timings: 0
 
 mono: 0
@@ -76,7 +77,7 @@ alpha: 0.
 bdo_undist: 0
 
 # Init / KF px th.
-finit_parallax: 20.
+finit_parallax: 5.
 
 # Features Extractor
 use_shi_tomasi: 0
@@ -100,14 +101,14 @@ do_klt: 1
 klt_use_prior: 1
 btrack_keyframetoframe: 0
 nklt_win_size: 9
-nklt_pyr_lvl: 3
+nklt_pyr_lvl: 4
 
 # Opencv Default: 30 iters. + 0.01 prec.
 nmax_iter: 30
 fmax_px_precision: 0.01
 
-fmax_fbklt_dist: 0.5
-nklt_err: 30.
+fmax_fbklt_dist: 2.0
+nklt_err: 100.
 
 # Matching th.
 bdo_track_localmap: 1
@@ -120,7 +121,7 @@ doepipolar: 1
 dop3p : 0
 bdo_random: 1
 nransac_iter: 100
-fransac_err: 3.
+fransac_err: 10.
 
 # Reproj err th.
 fmax_reproj_err: 3.
