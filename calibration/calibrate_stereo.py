@@ -23,6 +23,7 @@ import argparse
 import os
 import sys
 import glob
+import gc
 import numpy as np
 import cv2
 
@@ -50,10 +51,13 @@ def find_corners(image_paths, board_size):
     for path in image_paths:
         img = cv2.imread(path)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        del img
         ret, corners = cv2.findChessboardCornersSB(
             gray, board_size,
             cv2.CALIB_CB_EXHAUSTIVE | cv2.CALIB_CB_ACCURACY
         )
+        del gray
+        gc.collect()
         if ret:
             obj_points.append(objp)
             img_points.append(corners)

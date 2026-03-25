@@ -16,25 +16,25 @@ Camera.left_nheight: 600
 Camera.right_nwidth: 800
 Camera.right_nheight: 600
 
-Camera.fxl: 1214.681660
-Camera.fyl: 1217.285869
-Camera.cxl: 531.903604
-Camera.cyl: 293.064903
+Camera.fxl: 1241.086781
+Camera.fyl: 1242.678996
+Camera.cxl: 512.783501
+Camera.cyl: 222.129366
 
-Camera.k1l: 0.0325530545
-Camera.k2l: 0.2510125073
-Camera.p1l: -0.0055639604
-Camera.p2l: 0.0000910618
+Camera.k1l: 0.0510397144
+Camera.k2l: -0.0474229118
+Camera.p1l: -0.0227970724
+Camera.p2l: -0.0041487839
 
-Camera.fxr: 1216.173515
-Camera.fyr: 1218.627379
-Camera.cxr: 525.860151
-Camera.cyr: 289.519868
+Camera.fxr: 1242.532829
+Camera.fyr: 1245.146982
+Camera.cxr: 503.812748
+Camera.cyr: 218.514727
 
-Camera.k1r: 0.0328942387
-Camera.k2r: 0.3610832651
-Camera.p1r: -0.0050280884
-Camera.p2r: 0.0005715315
+Camera.k1r: 0.0613040897
+Camera.k2r: 0.0037916671
+Camera.p1r: -0.0239747344
+Camera.p2r: -0.0057442697
 
 body_T_cam0: !!opencv-matrix
    rows: 4
@@ -46,10 +46,10 @@ body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [0.9999936467, -0.0015530036, 0.0032085530, -0.0296369421, 0.0017658007, 0.9977230941, -0.0674203927, 0.0361528829, -0.0030965433, 0.0674256300, 0.9977194976, 0.0024160288, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
+   data: [0.9999452052, 0.0069791657, -0.0078024193, -0.0296736065, -0.0068640076, 0.9998685374, 0.0146899022, 0.0002702102, 0.0079039168, -0.0146355414, 0.9998616549, 0.0005161040, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]
 
-# Baseline: 4.68cm
-# Stereo reprojection error: 5.3719px
+# Baseline: 2.97cm
+# Stereo reprojection error: 1.0084px
 
 #--------------------------------------------------------------------------------------------
 # SLAM Parameters. Adjust them!
@@ -60,7 +60,7 @@ log_timings: 0
 mono: 0
 stereo: 1
 
-force_realtime: 1
+force_realtime: 0
 
 # Estimator Mode
 slam_mode: 1
