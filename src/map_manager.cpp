@@ -439,7 +439,7 @@ void MapManager::stereoMatching(Frame &frame, const std::vector<cv::Mat> &vleftp
             const size_t nbmin3dcokps = 1;
 
             auto vnearkps = frame.getSurroundingKeypoints(kp);
-            if( vnearkps.size() >= nbmin3dcokps ) 
+            if( vnearkps.size() >= nbmin3dcokps )
             {
                 std::vector<Keypoint> vnear3dkps;
                 vnear3dkps.reserve(vnearkps.size());
@@ -450,7 +450,7 @@ void MapManager::stereoMatching(Frame &frame, const std::vector<cv::Mat> &vleftp
                 }
 
                 if( vnear3dkps.size() >= nbmin3dcokps ) {
-                
+
                     size_t nb3dkp = 0;
                     double mean_z = 0.;
                     double weights = 0.;
@@ -471,7 +471,7 @@ void MapManager::stereoMatching(Frame &frame, const std::vector<cv::Mat> &vleftp
 
                         cv::Point2f projpt = frame.projCamToRightImageDist(predcampt);
 
-                        if( frame.isInRightImage(projpt) ) 
+                        if( frame.isInRightImage(projpt) )
                         {
                             v3dkps.push_back(kp.px_);
                             v3dpriors.push_back(projpt);
@@ -479,6 +479,21 @@ void MapManager::stereoMatching(Frame &frame, const std::vector<cv::Mat> &vleftp
                             continue;
                         }
                     }
+                }
+            }
+
+            // No 3D neighbor prior found — fall back to SAD-based disparity estimate.
+            // Searches horizontally at the coarsest pyramid level to find the best
+            // x-match in the right image, giving KLT a proper starting disparity even
+            // at initialization when no 3D map points exist yet.
+            {
+                float xprior = -1.;
+                float l1err;
+                cv::Point2f pyrleftpt = kp.px_ * downpyrcoef;
+                ptracker_->getLineMinSAD(vleftpyr.at(nmaxpyrlvl), vrightpyr.at(nmaxpyrlvl), pyrleftpt, winsize, xprior, l1err, true);
+                xprior *= uppyrcoef;
+                if( xprior >= 0 && xprior <= kp.px_.x ) {
+                    priorpt.x = xprior;
                 }
             }
         }
@@ -595,7 +610,10 @@ void MapManager::stereoMatching(Frame &frame, const std::vector<cv::Mat> &vleftp
             epi_err = MultiViewGeometry::computeSampsonDistance(frame.Frl_, lunpx, runpx);
         }
         
-        if( epi_err <= 2. ) 
+        // Threshold raised from 2.0 to 10.0: non-rectified IMX708 stereo pair
+        // has slight pitch/yaw misalignment, giving Sampson distances of ~2-8
+        // for correct matches. The original 2.0 cutoff rejected all stereo tracks.
+        if( epi_err <= 10. )
         {
             frame.updateKeypointStereo(vgoodids.at(i), vgoodrkps.at(i));
             nbgood++;
