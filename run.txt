@@ -22,3 +22,5 @@ ros2 run ov2slam ov2slam_node \
 
 source /opt/ros/humble/setup.bash
 rviz2 -d /root/ov2slam-rpi/ov2slam.rviz
+
+ros2 topic echo /vo_pose --field pose.position
